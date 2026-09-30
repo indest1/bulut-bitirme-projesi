@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Bulut Yönetim Paneli - Giriş</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #eef2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: white; padding: 35px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 340px; }
+        h3 { color: #1a73e8; margin-top: 0; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #1558b0; }
+        .error { color: #d93025; font-size: 13px; text-align: center; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h3>CloudOps Yönetim Paneli</h3>
+        {% if hata %} <div class="error">{{ hata }}</div> {% endif %}
+        <form method="POST">
+            <input type="text" name="kullanici" placeholder="Kullanıcı Adı (admin)" required>
+            <input type="password" name="sifre" placeholder="Şifre (bulut123)" required>
+            <button type="submit">Giriş Yap</button>
+        </form>
+    </div>
+</body>
+</html>
