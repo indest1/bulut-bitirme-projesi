@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  envanter-app:
+    build: .
+    container_name: bulut_envanter_servisi
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data

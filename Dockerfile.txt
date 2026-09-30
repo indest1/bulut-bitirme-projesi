@@ -1,0 +1,18 @@
+# Temel imaj olarak hafif Python Linux imajı kullanıyoruz
+FROM python:3.11-slim
+
+# Konteyner içinde çalışma klasörü belirliyoruz
+WORKDIR /app
+
+# Gereksinim dosyasını kopyalayıp paketleri kuruyoruz
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Uygulama kodlarını ve şablonları içeri alıyoruz
+COPY . .
+
+# Uygulamanın çalışacağı port
+EXPOSE 5000
+
+# Uygulamayı başlatma komutu
+CMD ["python", "app.py"]
