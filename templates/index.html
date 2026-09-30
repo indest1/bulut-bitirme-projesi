@@ -1,67 +1,123 @@
-templates/index.html
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulut Sunucu Envanter Paneli</title>
+    <title>CloudOps - Bulut Envanter & Sağlık Takip Platformu</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 30px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        h2 { color: #1a73e8; margin-top: 0; }
-        form { display: flex; gap: 10px; margin-bottom: 25px; }
-        input, select, button { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
-        input { flex: 1; }
-        button { background-color: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background-color: #1558b0; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 25px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .title h2 { margin: 0; color: #1a73e8; }
+        .title p { margin: 5px 0 0 0; color: #666; font-size: 14px; }
+        .logout-btn { background: #5f6368; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; }
+        
+        .cards { display: flex; gap: 15px; margin-bottom: 25px; }
+        .card { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: center; }
+        .card h4 { margin: 0; color: #777; font-size: 14px; }
+        .card .num { font-size: 26px; font-weight: bold; margin-top: 8px; color: #202124; }
+        .card.active .num { color: #137333; }
+        .card.down .num { color: #d93025; }
+
+        .main-box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .actions-bar { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px; }
+        form { display: flex; gap: 10px; flex: 2; }
+        input, button { padding: 10px 14px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        button { background: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; }
+        .export-btn { background: #0f9d58; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-flex; align-items: center; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
-        th { background-color: #f8f9fa; color: #555; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .aktif { background-color: #e6f4ea; color: #137333; }
-        .bakim { background-color: #fef7e0; color: #b06000; }
-        .sil-btn { color: #d93025; text-decoration: none; font-weight: bold; }
+        th, td { text-align: left; padding: 14px; border-bottom: 1px solid #eee; font-size: 14px; }
+        th { background: #f8f9fa; color: #444; }
+        
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .up { background: #e6f4ea; color: #137333; }
+        .down { background: #fce8e6; color: #d93025; }
+        .unknown { background: #f1f3f4; color: #5f6368; }
+
+        .btn-ping { background: #fbbc04; color: #202124; padding: 5px 10px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; margin-right: 5px; }
+        .btn-del { color: #d93025; text-decoration: none; font-weight: bold; font-size: 13px; }
+
+        .log-section { margin-top: 30px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .log-section h4 { margin: 0 0 15px 0; color: #444; }
+        .log-item { font-family: monospace; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; color: #555; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Enver Furkan Atay - Bulut Envanter Paneli</h2>
-        <p>Bulut Bilişim Operatörlüğü Bitirme Projesi - Modül 1 Servisi</p>
-        
-        <form action="/ekle" method="POST">
-            <input type="text" name="sunucu_adi" placeholder="Sunucu Adı (Örn: Web-VM-01)" required>
-            <input type="text" name="ip_adresi" placeholder="IP Adresi (Örn: 192.168.1.10)" required>
-            <select name="durum">
-                <option value="Aktif">Aktif</option>
-                <option value="Bakımda">Bakımda</option>
-            </select>
-            <button type="submit">Ekle</button>
-        </form>
+    <div class="header">
+        <div class="title">
+            <h2>CloudOps - Bulut Envanter & Altyapı İzleme</h2>
+            <p>Bulut Bilişim Operatörlüğü Bitirme Projesi</p>
+        </div>
+        <a href="/logout" class="logout-btn">Çıkış Yap</a>
+    </div>
+
+    <div class="cards">
+        <div class="card">
+            <h4>Toplam Kayıtlı Varlık</h4>
+            <div class="num">{{ toplam }}</div>
+        </div>
+        <div class="card active">
+            <h4>Çalışır Durumda (Online)</h4>
+            <div class="num">{{ aktif }}</div>
+        </div>
+        <div class="card down">
+            <h4>Erişilemeyen (Offline)</h4>
+            <div class="num">{{ kapali }}</div>
+        </div>
+    </div>
+
+    <div class="main-box">
+        <div class="actions-bar">
+            <form action="/ekle" method="POST">
+                <input type="text" name="sunucu_adi" placeholder="Sunucu Adı (Örn: Web-Node-1)" required style="flex: 2;">
+                <input type="text" name="ip_adresi" placeholder="IP / Alan Adı (Örn: 8.8.8.8 veya google.com)" required style="flex: 2;">
+                <input type="number" name="port" placeholder="Port" value="80" style="width: 75px;" required>
+                <button type="submit">+ Varlık Ekle</button>
+            </form>
+            <a href="/export" class="export-btn">📥 CSV Raporu İndir</a>
+        </div>
 
         <table>
             <thead>
                 <tr>
-                    <th>Sunucu Adı</th>
-                    <th>IP Adresi</th>
-                    <th>Durum</th>
-                    <th>İşlem</th>
+                    <th>Varlık / Sunucu</th>
+                    <th>Hedef Adres & Port</th>
+                    <th>Canlı Sağlık Durumu</th>
+                    <th>Son Kontrol</th>
+                    <th>Operasyon</th>
                 </tr>
             </thead>
             <tbody>
                 {% for s in sunucular %}
                 <tr>
                     <td><strong>{{ s[1] }}</strong></td>
-                    <td>{{ s[2] }}</td>
-                    <td><span class="badge {{ 'aktif' if s[3] == 'Aktif' else 'bakim' }}">{{ s[3] }}</span></td>
-                    <td><a href="/sil/{{ s[0] }}" class="sil-btn">Sil</a></td>
+                    <td><code>{{ s[2] }}:{{ s[3] }}</code></td>
+                    <td>
+                        <span class="badge {% if 'Çalışıyor' in s[4] %}up{% elif s[4] == 'Erişilemiyor' %}down{% else %}unknown{% endif %}">
+                            {{ s[4] }}
+                        </span>
+                    </td>
+                    <td>{{ s[5] or '-' }}</td>
+                    <td>
+                        <a href="/ping/{{ s[0] }}" class="btn-ping">⚡ Test Et</a>
+                        <a href="/sil/{{ s[0] }}" class="btn-del" onclick="return confirm('Silmek istediğinize emin misiniz?')">Sil</a>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4" style="text-align: center; color: #888;">Henüz kayıtlı sunucu yok. Yukarıdan ekleyebilirsiniz.</td>
+                    <td colspan="5" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="log-section">
+        <h4>Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>
+        {% for l in loglar %}
+            <div class="log-item">[{{ l[2] }}] - {{ l[1] }}</div>
+        {% else %}
+            <div class="log-item">Henüz log kaydı bulunmuyor.</div>
+        {% endfor %}
     </div>
 </body>
 </html>
