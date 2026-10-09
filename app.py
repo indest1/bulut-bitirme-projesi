@@ -21,9 +21,9 @@ DB_NAME = os.path.join(DATA_DIR, "envanter.db")
 ADMIN_USER = "admin"
 ADMIN_PASS = "bulut123"
 
-# TELEGRAM BILDIRIM AYARLARI (Istege Bagli: Bot olusturdugunda doldurabilirsin)
-TELEGRAM_BOT_TOKEN = "8652542165:AAGJcR3BVZFY3v9Ci0ug9uiI43e6Yt7meQE"   
-TELEGRAM_CHAT_ID = "8040095023"     
+# TELEGRAM BILDIRIM AYARLARI
+TELEGRAM_BOT_TOKEN = "BURAYA_BOT_TOKENINI_YAPISTIR"
+TELEGRAM_CHAT_ID = "BURAYA_CHAT_ID_YAPISTIR"
 
 def telegram_bildir(mesaj):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -31,7 +31,7 @@ def telegram_bildir(mesaj):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
-        requests.post(url, json=payload, timeout=3.0)
+        requests.post(url, json=payload, timeout=5.0)
     except Exception as e:
         print(f"Telegram gonderim hatasi: {e}")
 
@@ -60,7 +60,6 @@ def init_db():
         )
     ''')
     
-    # Mevcut veritabaninda yeni sutunlar yoksa ekle (Geriye Donuk Uyumluluk)
     try:
         c.execute("ALTER TABLE sunucular ADD COLUMN toplam_kontrol INTEGER DEFAULT 0")
     except Exception:
@@ -169,7 +168,7 @@ def otomatik_kontrol_dongusu():
                     WHERE id = ?
                 """, (yeni_durum, gecikme, simdi, t_sayi, b_sayi, ssl_gun, s_id))
 
-                # Durum Degisikligini Yakala & Logla & Telegram Bildirimi Gonder
+                # Kriz Durumunda Anlik Alarm
                 if eski_durum != 'Bilinmiyor' and eski_durum != yeni_durum:
                     tam_tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     if yeni_durum.startswith("Erisilemiyor") or "Hata" in yeni_durum:
@@ -187,6 +186,47 @@ def otomatik_kontrol_dongusu():
             print(f"Otomatik tarama hatasi: {e}")
 
         time.sleep(15)
+
+# 1 SAATTE BİR TELEGRAM'A DURUM RAPORU GÖNDEREN MOTOR
+def saatlik_rapor_dongusu():
+    # Uygulama ayağa kalktığında ilk raporu hemen görebilmek için 10 saniye bekler
+    time.sleep(10)
+    while True:
+        try:
+            conn = sqlite3.connect(DB_NAME)
+            c = conn.cursor()
+            c.execute("SELECT sunucu_adi, durum, gecikme, port, ip_adresi FROM sunucular")
+            sunucular = c.fetchall()
+            conn.close()
+
+            toplam = len(sunucular)
+            aktif = sum(1 for s in sunucular if s[1] == 'Calisiyor')
+            kapali = toplam - aktif
+
+            cpu = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('/').percent
+            zaman = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            mesaj = f"📊 <b>CLOUDOPS SAATLİK ALTYAPI RAPORU</b>\n"
+            mesaj += f"🕒 <i>Tarih: {zaman}</i>\n\n"
+            mesaj += f"🖥 <b>Host Kaynakları:</b> CPU: %{cpu} | RAM: %{ram} | Disk: %{disk}\n"
+            mesaj += f"📈 <b>Varlık Özeti:</b> Toplam: {toplam} | Aktif: {aktif} | Kapalı: {kapali}\n\n"
+            mesaj += "📋 <b>Servis Durumları:</b>\n"
+
+            if not sunucular:
+                mesaj += "<i>Kayıtlı sunucu bulunmuyor.</i>"
+            else:
+                for s in sunucular:
+                    simge = "🟢" if s[1] == "Calisiyor" else "🔴"
+                    mesaj += f"{simge} <b>{s[0]}</b> ({s[4]}:{s[3]}): {s[1]} ({s[2]}ms)\n"
+
+            telegram_bildir(mesaj)
+        except Exception as e:
+            print(f"Saatlik rapor hatasi: {e}")
+
+        # 3600 saniye = 1 saat bekler
+        time.sleep(3600)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -276,7 +316,6 @@ def api_durum():
     aktif = sum(1 for s in sunucular if s['durum'] == 'Calisiyor')
     kapali = sum(1 for s in sunucular if s['durum'] != 'Calisiyor' and s['durum'] != 'Bilinmiyor')
 
-    # AWS EC2 Sunucu Kaynak Tuketimi (Host Metrics)
     cpu_usage = psutil.cpu_percent(interval=None)
     ram_usage = psutil.virtual_memory().percent
     disk_usage = psutil.disk_usage('/').percent
@@ -438,8 +477,14 @@ def export():
     )
 
 init_db()
+
+# Arka Plan Kontrol Motoru (15 saniyede bir kesinti tespiti)
 bg_thread = threading.Thread(target=otomatik_kontrol_dongusu, daemon=True)
 bg_thread.start()
+
+# Arka Plan Saatlik Rapor Motoru (Her 1 saatte bir tam durum ozeti)
+report_thread = threading.Thread(target=saatlik_rapor_dongusu, daemon=True)
+report_thread.start()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
