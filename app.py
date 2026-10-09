@@ -283,7 +283,48 @@ def export():
         mimetype="text/csv",
         headers={"Content-disposition": "attachment; filename=envanter_raporu.csv"}
     )
+from flask import jsonify
 
+@app.route('/api/durum')
+def api_durum():
+    if not session.get('giris'):
+        return jsonify({"hata": "Yetkisiz"}), 401
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT id, sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol FROM sunucular")
+    sunucular_raw = c.fetchall()
+
+    c.execute("SELECT islem, tarih FROM loglar ORDER BY id DESC LIMIT 5")
+    loglar_raw = c.fetchall()
+    conn.close()
+
+    sunucular = []
+    for s in sunucular_raw:
+        sunucular.append({
+            "id": s[0],
+            "sunucu_adi": s[1],
+            "ip_adresi": s[2],
+            "port": s[3],
+            "durum": s[4],
+            "gecikme": s[5],
+            "son_kontrol": s[6] or '-'
+        })
+
+    loglar = [{"islem": l[0], "tarih": l[1]} for l in loglar_raw]
+    toplam = len(sunucular)
+    aktif = sum(1 for s in sunucular if s['durum'] == 'Çalışıyor')
+    kapali = sum(1 for s in sunucular if s['durum'] != 'Çalışıyor' and s['durum'] != 'Bilinmiyor')
+
+    return jsonify({
+        "sunucular": sunucular,
+        "loglar": loglar,
+        "istatistik": {
+            "toplam": toplam,
+            "aktif": aktif,
+            "kapali": kapali
+        }
+    })
 init_db()
 bg_thread = threading.Thread(target=otomatik_kontrol_dongusu, daemon=True)
 bg_thread.start()
