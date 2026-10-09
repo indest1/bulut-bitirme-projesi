@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistem Operasyon Günlüğü - CloudOps</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 25px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .title h2 { margin: 0; color: #1a73e8; }
+        .title p { margin: 5px 0 0 0; color: #666; font-size: 14px; }
+        .header-nav { display: flex; gap: 10px; align-items: center; }
+        .btn-back { background: #1a73e8; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; }
+        .btn-clear { background: #d93025; color: white; padding: 8px 16px; border-radius: 6px; border: none; font-size: 13px; font-weight: bold; cursor: pointer; }
+        
+        .box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .search-bar { width: 100%; margin-bottom: 20px; padding: 12px 14px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #eee; font-size: 13px; }
+        th { background: #f8f9fa; color: #444; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; font-family: monospace; }
+        .badge-down { background: #fce8e6; color: #d93025; }
+        .badge-up { background: #e6f4ea; color: #137333; }
+        .badge-info { background: #e8f0fe; color: #1a73e8; }
+        .date-col { width: 180px; color: #777; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">
+            <h2>📜 Sistem Operasyon & Olay Günlüğü</h2>
+            <p>Altyapı kesintileri, kurtarma olayları ve sistem hareketleri</p>
+        </div>
+        <div class="header-nav">
+            <a href="/" class="btn-back">⬅ Ana Panele Dön</a>
+            <form action="/loglar/temizle" method="POST" style="margin: 0;" onsubmit="return confirm('Tüm geçmiş kayıtları silmek istediğinize emin misiniz?')">
+                <button type="submit" class="btn-clear">🗑 Günlüğü Temizle</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="box">
+        <input type="text" id="logFilter" class="search-bar" placeholder="🔍 Loglar içinde ara (Örn: KESİNTİ, KURTARILDI, Google, IP vb.)..." onkeyup="filtreleLoglar()">
+        
+        <table id="logTable">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">ID</th>
+                    <th class="date-col">Zaman</th>
+                    <th style="width: 120px;">Kategori</th>
+                    <th>Olay Detayı</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in loglar %}
+                <tr>
+                    <td><code>#{{ l[0] }}</code></td>
+                    <td class="date-col">{{ l[2] }}</td>
+                    <td>
+                        {% if 'KESİNTİ' in l[1] %}
+                            <span class="badge badge-down">DOWN / KESİNTİ</span>
+                        {% elif 'KURTARILDI' in l[1] %}
+                            <span class="badge badge-up">UP / KURTARILDI</span>
+                        {% else %}
+                            <span class="badge badge-info">SİSTEM</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ l[1] }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #888; padding: 30px;">Kayıtlı sistem olayı bulunmuyor.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function filtreleLoglar() {
+            var filter = document.getElementById("logFilter").value.toLowerCase();
+            var rows = document.querySelectorAll("#logTable tbody tr");
+            rows.forEach(function(row) {
+                var text = row.innerText.toLowerCase();
+                row.style.display = text.indexOf(filter) > -1 ? "" : "none";
+            });
+        }
+    </script>
+</body>
+</html>
