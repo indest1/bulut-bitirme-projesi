@@ -8,9 +8,12 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .title h2 { margin: 0; color: #1a73e8; }
         .title p { margin: 5px 0 0 0; color: #666; font-size: 14px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .live-badge { background: #e6f4ea; color: #137333; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; border: 1px solid #ceead6; display: flex; align-items: center; gap: 6px; }
+        .live-dot { width: 8px; height: 8px; background: #137333; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
         .logout-btn { background: #5f6368; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; }
 
-        /* Alarm Banner */
         .banner { padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 10px; }
         .banner-danger { background-color: #fce8e6; color: #d93025; border: 1px solid #fad2cf; }
         .banner-success { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
@@ -24,7 +27,7 @@
 
         .main-box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .actions-bar { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-        form.add-form { display: flex; gap: 10px; flex: 2; min-width: 320px; }
+        form.add-form { display: flex; gap: 10px; flex: 2; min-width: 320px; align-items: center; }
         input, select, button { padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
         button { background: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; }
         
@@ -52,7 +55,6 @@
         .log-section h4 { margin: 0 0 12px 0; color: #444; }
         .log-item { font-family: monospace; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; color: #555; }
 
-        /* Modal Düzenleme */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 25px; border-radius: 8px; width: 360px; }
     </style>
@@ -63,13 +65,15 @@
             <h2>CloudOps - Altyapı Envanter & Sağlık Merkezi</h2>
             <p>Bulut Bilişim Operatörlüğü Bitirme Projesi</p>
         </div>
-        <a href="/logout" class="logout-btn">Çıkış Yap</a>
+        <div class="header-right">
+            <div class="live-badge"><span class="live-dot"></span> Canlı İzleme: 15s</div>
+            <a href="/logout" class="logout-btn">Çıkış Yap</a>
+        </div>
     </div>
 
-    <!-- Alarm Banner -->
     {% if kapali > 0 %}
         <div class="banner banner-danger">
-            ⚠️️ <strong>KRİTİK UYARI:</strong> {{ kapali }} adet altyapı servisine ulaşılamıyor! Müdahale gerekiyor.
+            ⚠ <strong>KRİTİK UYARI:</strong> {{ kapali }} adet altyapı servisine ulaşılamıyor! Müdahale gerekiyor.
         </div>
     {% elif toplam > 0 %}
         <div class="banner banner-success">
@@ -95,9 +99,9 @@
     <div class="main-box">
         <div class="actions-bar">
             <form action="/ekle" method="POST" class="add-form">
-                <input type="text" name="sunucu_adi" placeholder="Sunucu Adı (Örn: Web-Node-01)" required style="flex: 2;">
-                <input type="text" name="ip_adresi" placeholder="IP / Alan Adı (Örn: google.com)" required style="flex: 2;">
-                <input type="number" name="port" placeholder="Port" value="80" style="width: 70px;" required>
+                <input type="text" name="sunucu_adi" placeholder="Sunucu Adı (Örn: Web-Node-01)" required style="flex: 1.5;">
+                <input type="text" id="ipInput" name="ip_adresi" placeholder="IP / Alan Adı (Örn: mc.hypixel.net)" required oninput="otomatikPortAta()" style="flex: 2;">
+                <input type="number" id="portInput" name="port" placeholder="Port" value="80" style="width: 85px;" required title="Port otomatik önerilir, elle değiştirebilirsiniz.">
                 <button type="submit">+ Ekle</button>
             </form>
             <div class="btn-group">
@@ -125,7 +129,7 @@
                     <td><strong>{{ s[1] }}</strong></td>
                     <td><code>{{ s[2] }}:{{ s[3] }}</code></td>
                     <td>
-                        <span class="badge {% if s[4] == 'Çalışıyor' and s[5] < 60 %}fast{% elif s[4] == 'Çalışıyor' %}medium{% elif s[4] == 'Erişilemiyor' %}down{% else %}unknown{% endif %}">
+                        <span class="badge {% if s[4] == 'Çalışıyor' and s[5] < 60 %}fast{% elif s[4] == 'Çalışıyor' %}medium{% elif s[4] == 'Erişilemiyor' or 'Hata' in s[4] %}down{% else %}unknown{% endif %}">
                             {{ s[4] }}
                         </span>
                     </td>
@@ -172,6 +176,46 @@
     </div>
 
     <script>
+        // Akıllı Port Tahmin Fonksiyonu
+        function otomatikPortAta() {
+            var val = document.getElementById("ipInput").value.trim().toLowerCase();
+            var portBox = document.getElementById("portInput");
+
+            // Eğer adresin içine doğrudan :port girilmişse (Örn: 1.2.3.4:25565)
+            if (val.includes(":") && !val.startsWith("http")) {
+                var parcalar = val.split(":");
+                if (parcalar[1] && !isNaN(parcalar[1])) {
+                    portBox.value = parcalar[1];
+                    return;
+                }
+            }
+
+            // Minecraft sunucu kalıpları
+            if (val.includes("mc.") || val.includes("minecraft") || val.includes("craft") || val.includes("hypixel")) {
+                portBox.value = 25565;
+            }
+            // HTTPS bağlantısı
+            else if (val.startsWith("https://")) {
+                portBox.value = 443;
+            }
+            // SSH / Güvenli kabuk
+            else if (val.includes("ssh.") || val.includes("vpn.")) {
+                portBox.value = 22;
+            }
+            // Veritabanı
+            else if (val.includes("mysql") || val.includes("sql") || val.includes("db.")) {
+                portBox.value = 3306;
+            }
+            // DNS sunucusu (1.1.1.1 veya 8.8.8.8 gibi meşhur IP'ler)
+            else if (val === "8.8.8.8" || val === "1.1.1.1" || val.includes("dns")) {
+                portBox.value = 53;
+            }
+            // Standart web siteleri
+            else {
+                portBox.value = 80;
+            }
+        }
+
         function filterTable() {
             var input = document.getElementById("searchInput").value.toLowerCase();
             var rows = document.querySelectorAll("#serverTable tbody tr");
@@ -192,6 +236,15 @@
         function closeEditModal() {
             document.getElementById("editModal").style.display = "none";
         }
+
+        setInterval(function() {
+            var isModalOpen = document.getElementById("editModal").style.display === "flex";
+            var isSearching = document.getElementById("searchInput").value.trim().length > 0;
+            var isTyping = document.getElementById("ipInput") === document.activeElement;
+            if (!isModalOpen && !isSearching && !isTyping) {
+                location.reload();
+            }
+        }, 15000);
     </script>
 </body>
 </html>
