@@ -1,23 +1,39 @@
 from flask import Flask, render_template, request, redirect, url_for, session, Response, jsonify
 import sqlite3
 import socket
+import ssl
 import time
 import threading
 import requests
 import os
+import psutil
 from urllib.parse import urlparse
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "bulut-operasyon-yonetim-anahtari"
 
-# Kalici veritabani klasoru
+# Kalici veri tabani yolu (Volume)
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_NAME = os.path.join(DATA_DIR, "envanter.db")
 
 ADMIN_USER = "admin"
 ADMIN_PASS = "bulut123"
+
+# TELEGRAM BILDIRIM AYARLARI (Istege Bagli: Bot olusturdugunda doldurabilirsin)
+TELEGRAM_BOT_TOKEN = ""   # Ornek: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+TELEGRAM_CHAT_ID = ""     # Ornek: "987654321"
+
+def telegram_bildir(mesaj):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
+        requests.post(url, json=payload, timeout=3.0)
+    except Exception as e:
+        print(f"Telegram gonderim hatasi: {e}")
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -30,7 +46,10 @@ def init_db():
             port INTEGER DEFAULT 80,
             durum TEXT DEFAULT 'Bilinmiyor',
             gecikme INTEGER DEFAULT 0,
-            son_kontrol TEXT
+            son_kontrol TEXT,
+            toplam_kontrol INTEGER DEFAULT 0,
+            basarili_kontrol INTEGER DEFAULT 0,
+            ssl_gun INTEGER DEFAULT -1
         )
     ''')
     c.execute('''
@@ -40,6 +59,21 @@ def init_db():
             tarih TEXT NOT NULL
         )
     ''')
+    
+    # Mevcut veritabaninda yeni sutunlar yoksa ekle (Geriye Donuk Uyumluluk)
+    try:
+        c.execute("ALTER TABLE sunucular ADD COLUMN toplam_kontrol INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE sunucular ADD COLUMN basarili_kontrol INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE sunucular ADD COLUMN ssl_gun INTEGER DEFAULT -1")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -58,6 +92,21 @@ def hedefi_temizle(hedef):
         return parsed.netloc.split(':')[0]
     return hedef.split('/')[0]
 
+def ssl_kalan_gun_hesapla(hedef, port=443):
+    if port != 443:
+        return -1
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((hedef, port), timeout=3.0) as sock:
+            with context.wrap_socket(sock, server_hostname=hedef) as ssock:
+                cert = ssock.getpeercert()
+                bitis_str = cert['notAfter']
+                bitis_tarihi = datetime.strptime(bitis_str, '%b %d %H:%M:%S %Y %Z')
+                kalan_gun = (bitis_tarihi - datetime.utcnow()).days
+                return max(0, kalan_gun)
+    except Exception:
+        return -1
+
 def ping_server(hedef, port):
     hedef = hedefi_temizle(hedef)
     port = int(port)
@@ -66,57 +115,71 @@ def ping_server(hedef, port):
     try:
         ip = socket.gethostbyname(hedef)
     except socket.gaierror:
-        return "Erisilemiyor (DNS Hatasi)", 0
+        return "Erisilemiyor (DNS Hatasi)", 0, -1
+
+    ssl_gun = ssl_kalan_gun_hesapla(hedef, port)
 
     if port in [80, 443]:
         sema = "https" if port == 443 else "http"
         url = f"{sema}://{hedef}"
         try:
-            resp = requests.get(
+            resp = requests.head(
                 url, 
-                timeout=2.0, 
+                timeout=2.5, 
                 allow_redirects=True, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                headers={'User-Agent': 'CloudOps-Monitor/1.0'}
             )
             gecikme = int((time.time() - basla) * 1000)
             if resp.status_code < 400:
-                return "Calisiyor", gecikme
+                return "Calisiyor", gecikme, ssl_gun
             else:
-                return f"Hata ({resp.status_code})", gecikme
+                return f"Hata ({resp.status_code})", gecikme, ssl_gun
         except requests.RequestException:
-            return "Erisilemiyor", 0
+            return "Erisilemiyor", 0, ssl_gun
     else:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(2.0)
+        s.settimeout(2.5)
         try:
             s.connect((ip, port))
             gecikme = int((time.time() - basla) * 1000)
             s.close()
-            return "Calisiyor", gecikme
+            return "Calisiyor", gecikme, -1
         except (socket.timeout, ConnectionRefusedError, OSError):
-            return "Erisilemiyor", 0
+            return "Erisilemiyor", 0, -1
 
 def otomatik_kontrol_dongusu():
     while True:
         try:
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
-            c.execute("SELECT id, ip_adresi, port, sunucu_adi, durum FROM sunucular")
+            c.execute("SELECT id, ip_adresi, port, sunucu_adi, durum, toplam_kontrol, basarili_kontrol FROM sunucular")
             sunucular = c.fetchall()
 
             simdi = datetime.now().strftime("%H:%M:%S")
-            for s_id, hedef, port, ad, eski_durum in sunucular:
-                yeni_durum, gecikme = ping_server(hedef, port)
-                c.execute("UPDATE sunucular SET durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (yeni_durum, gecikme, simdi, s_id))
+            for s_id, hedef, port, ad, eski_durum, t_sayi, b_sayi in sunucular:
+                yeni_durum, gecikme, ssl_gun = ping_server(hedef, port)
+                
+                t_sayi = (t_sayi or 0) + 1
+                if yeni_durum == "Calisiyor":
+                    b_sayi = (b_sayi or 0) + 1
 
+                c.execute("""
+                    UPDATE sunucular 
+                    SET durum = ?, gecikme = ?, son_kontrol = ?, toplam_kontrol = ?, basarili_kontrol = ?, ssl_gun = ?
+                    WHERE id = ?
+                """, (yeni_durum, gecikme, simdi, t_sayi, b_sayi, ssl_gun, s_id))
+
+                # Durum Degisikligini Yakala & Logla & Telegram Bildirimi Gonder
                 if eski_durum != 'Bilinmiyor' and eski_durum != yeni_durum:
                     tam_tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     if yeni_durum.startswith("Erisilemiyor") or "Hata" in yeni_durum:
-                        mesaj = f"KESINTI: '{ad}' servisine erisim koptu! ({yeni_durum})"
+                        mesaj = f"🚨 KESINTI: '{ad}' servisine erisim koptu! ({yeni_durum})"
                         c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", (mesaj, tam_tarih))
+                        telegram_bildir(f"🚨 <b>CLOUDOPS ALARM: KESİNTİ!</b>\n\n<b>Sunucu:</b> {ad}\n<b>Adres:</b> {hedef}:{port}\n<b>Durum:</b> {yeni_durum}\n<b>Zaman:</b> {tam_tarih}")
                     elif yeni_durum == "Calisiyor":
-                        mesaj = f"KURTARILDI: '{ad}' servisi tekrar erisilebilir duruma geldi ({gecikme}ms)."
+                        mesaj = f"✅ KURTARILDI: '{ad}' servisi tekrar erisilebilir duruma geldi ({gecikme}ms)."
                         c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", (mesaj, tam_tarih))
+                        telegram_bildir(f"✅ <b>CLOUDOPS: SERVİS KURTARILDI</b>\n\n<b>Sunucu:</b> {ad}\n<b>Adres:</b> {hedef}:{port}\n<b>Gecikme:</b> {gecikme} ms\n<b>Zaman:</b> {tam_tarih}")
 
             conn.commit()
             conn.close()
@@ -163,10 +226,10 @@ def index():
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT * FROM sunucular")
+    c.execute("SELECT id, sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol, toplam_kontrol, basarili_kontrol, ssl_gun FROM sunucular")
     sunucular = c.fetchall()
 
-    c.execute("SELECT * FROM loglar ORDER BY id DESC LIMIT 5")
+    c.execute("SELECT islem, tarih FROM loglar ORDER BY id DESC LIMIT 5")
     son_loglar = c.fetchall()
 
     toplam = len(sunucular)
@@ -183,7 +246,7 @@ def api_durum():
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT id, sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol FROM sunucular")
+    c.execute("SELECT id, sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol, toplam_kontrol, basarili_kontrol, ssl_gun FROM sunucular")
     sunucular_raw = c.fetchall()
 
     c.execute("SELECT islem, tarih FROM loglar ORDER BY id DESC LIMIT 5")
@@ -192,6 +255,10 @@ def api_durum():
 
     sunucular = []
     for s in sunucular_raw:
+        toplam_k = s[7] or 0
+        basarili_k = s[8] or 0
+        uptime_pct = round((basarili_k / toplam_k * 100), 1) if toplam_k > 0 else 100.0
+
         sunucular.append({
             "id": s[0],
             "sunucu_adi": s[1],
@@ -199,13 +266,20 @@ def api_durum():
             "port": s[3],
             "durum": s[4],
             "gecikme": s[5],
-            "son_kontrol": s[6] or '-'
+            "son_kontrol": s[6] or '-',
+            "uptime": uptime_pct,
+            "ssl_gun": s[9] if s[9] is not None else -1
         })
 
     loglar = [{"islem": l[0], "tarih": l[1]} for l in loglar_raw]
     toplam = len(sunucular)
     aktif = sum(1 for s in sunucular if s['durum'] == 'Calisiyor')
     kapali = sum(1 for s in sunucular if s['durum'] != 'Calisiyor' and s['durum'] != 'Bilinmiyor')
+
+    # AWS EC2 Sunucu Kaynak Tuketimi (Host Metrics)
+    cpu_usage = psutil.cpu_percent(interval=None)
+    ram_usage = psutil.virtual_memory().percent
+    disk_usage = psutil.disk_usage('/').percent
 
     return jsonify({
         "sunucular": sunucular,
@@ -214,6 +288,11 @@ def api_durum():
             "toplam": toplam,
             "aktif": aktif,
             "kapali": kapali
+        },
+        "sistem": {
+            "cpu": cpu_usage,
+            "ram": ram_usage,
+            "disk": disk_usage
         }
     })
 
@@ -227,11 +306,15 @@ def ekle():
     port = int(request.form.get('port', 80))
 
     if ad and ip:
-        durum, gecikme = ping_server(ip, port)
+        durum, gecikme, ssl_gun = ping_server(ip, port)
         simdi = datetime.now().strftime("%H:%M:%S")
+        basarili = 1 if durum == "Calisiyor" else 0
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute("INSERT INTO sunucular (sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol) VALUES (?, ?, ?, ?, ?, ?)", (ad, ip, port, durum, gecikme, simdi))
+        c.execute("""
+            INSERT INTO sunucular (sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol, toplam_kontrol, basarili_kontrol, ssl_gun) 
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+        """, (ad, ip, port, durum, gecikme, simdi, basarili, ssl_gun))
         conn.commit()
         conn.close()
         log_ekle(f"Yeni altyapi eklendi: {ad} ({ip}:{port})")
@@ -246,12 +329,16 @@ def duzenle(id):
     yeni_ip = hedefi_temizle(request.form['ip_adresi'])
     yeni_port = int(request.form.get('port', 80))
 
-    durum, gecikme = ping_server(yeni_ip, yeni_port)
+    durum, gecikme, ssl_gun = ping_server(yeni_ip, yeni_port)
     simdi = datetime.now().strftime("%H:%M:%S")
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("UPDATE sunucular SET sunucu_adi = ?, ip_adresi = ?, port = ?, durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (yeni_ad, yeni_ip, yeni_port, durum, gecikme, simdi, id))
+    c.execute("""
+        UPDATE sunucular 
+        SET sunucu_adi = ?, ip_adresi = ?, port = ?, durum = ?, gecikme = ?, son_kontrol = ?, ssl_gun = ?
+        WHERE id = ?
+    """, (yeni_ad, yeni_ip, yeni_port, durum, gecikme, simdi, ssl_gun, id))
     conn.commit()
     conn.close()
     log_ekle(f"Sunucu guncellendi (ID: {id}): {yeni_ad}")
@@ -264,14 +351,21 @@ def ping(id):
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT ip_adresi, port, sunucu_adi FROM sunucular WHERE id = ?", (id,))
+    c.execute("SELECT ip_adresi, port, sunucu_adi, toplam_kontrol, basarili_kontrol FROM sunucular WHERE id = ?", (id,))
     row = c.fetchone()
 
     if row:
-        ip, port, ad = row
-        durum, gecikme = ping_server(ip, port)
+        ip, port, ad, t_sayi, b_sayi = row
+        durum, gecikme, ssl_gun = ping_server(ip, port)
         simdi = datetime.now().strftime("%H:%M:%S")
-        c.execute("UPDATE sunucular SET durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (durum, gecikme, simdi, id))
+        t_sayi = (t_sayi or 0) + 1
+        if durum == "Calisiyor":
+            b_sayi = (b_sayi or 0) + 1
+        c.execute("""
+            UPDATE sunucular 
+            SET durum = ?, gecikme = ?, son_kontrol = ?, toplam_kontrol = ?, basarili_kontrol = ?, ssl_gun = ?
+            WHERE id = ?
+        """, (durum, gecikme, simdi, t_sayi, b_sayi, ssl_gun, id))
         conn.commit()
         log_ekle(f"Manuel test: {ad} -> {durum} ({gecikme}ms)")
 
@@ -285,14 +379,20 @@ def tara_hepsi():
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT id, ip_adresi, port, sunucu_adi FROM sunucular")
+    c.execute("SELECT id, ip_adresi, port, sunucu_adi, toplam_kontrol, basarili_kontrol FROM sunucular")
     liste = c.fetchall()
 
     simdi = datetime.now().strftime("%H:%M:%S")
-    for item in liste:
-        s_id, ip, port, ad = item
-        durum, gecikme = ping_server(ip, port)
-        c.execute("UPDATE sunucular SET durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (durum, gecikme, simdi, s_id))
+    for s_id, ip, port, ad, t_sayi, b_sayi in liste:
+        durum, gecikme, ssl_gun = ping_server(ip, port)
+        t_sayi = (t_sayi or 0) + 1
+        if durum == "Calisiyor":
+            b_sayi = (b_sayi or 0) + 1
+        c.execute("""
+            UPDATE sunucular 
+            SET durum = ?, gecikme = ?, son_kontrol = ?, toplam_kontrol = ?, basarili_kontrol = ?, ssl_gun = ?
+            WHERE id = ?
+        """, (durum, gecikme, simdi, t_sayi, b_sayi, ssl_gun, s_id))
 
     conn.commit()
     conn.close()
@@ -319,18 +419,22 @@ def export():
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol FROM sunucular")
+    c.execute("SELECT sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol, toplam_kontrol, basarili_kontrol, ssl_gun FROM sunucular")
     veriler = c.fetchall()
     conn.close()
 
-    cikti = "Sunucu Adi,IP Adresi,Port,Durum,Gecikme (ms),Son Kontrol\n"
+    cikti = "Sunucu Adi,IP Adresi,Port,Durum,Gecikme (ms),Uptime (%),SSL Kalan Gun,Son Kontrol\n"
     for v in veriler:
-        cikti += f"{v[0]},{v[1]},{v[2]},{v[3]},{v[4]}ms,{v[5]}\n"
+        t_k = v[6] or 1
+        b_k = v[7] or 0
+        uptime = round((b_k / t_k * 100), 1)
+        ssl_metin = f"{v[8]} gun" if v[8] >= 0 else "N/A"
+        cikti += f"{v[0]},{v[1]},{v[2]},{v[3]},{v[4]}ms,%{uptime},{ssl_metin},{v[5]}\n"
 
     return Response(
         cikti,
         mimetype="text/csv",
-        headers={"Content-disposition": "attachment; filename=envanter_raporu.csv"}
+        headers={"Content-disposition": "attachment; filename=altyapi_sla_raporu.csv"}
     )
 
 init_db()
