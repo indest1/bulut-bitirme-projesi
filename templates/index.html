@@ -176,75 +176,128 @@
     </div>
 
     <script>
-        // Akıllı Port Tahmin Fonksiyonu
-        function otomatikPortAta() {
-            var val = document.getElementById("ipInput").value.trim().toLowerCase();
-            var portBox = document.getElementById("portInput");
+    // Akıllı Port Tahmini
+    function otomatikPortAta() {
+        var ipInput = document.getElementById("ipInput");
+        if (!ipInput) return;
+        var val = ipInput.value.trim().toLowerCase();
+        var portBox = document.getElementById("portInput");
 
-            // Eğer adresin içine doğrudan :port girilmişse (Örn: 1.2.3.4:25565)
-            if (val.includes(":") && !val.startsWith("http")) {
-                var parcalar = val.split(":");
-                if (parcalar[1] && !isNaN(parcalar[1])) {
-                    portBox.value = parcalar[1];
-                    return;
+        if (val.includes(":") && !val.startsWith("http")) {
+            var parcalar = val.split(":");
+            if (parcalar[1] && !isNaN(parcalar[1])) {
+                portBox.value = parcalar[1];
+                return;
+            }
+        }
+
+        if (val.includes("mc.") || val.includes("minecraft") || val.includes("craft") || val.includes("hypixel")) {
+            portBox.value = 25565;
+        } else if (val.startsWith("https://")) {
+            portBox.value = 443;
+        } else if (val.includes("ssh.") || val.includes("vpn.")) {
+            portBox.value = 22;
+        } else if (val.includes("mysql") || val.includes("sql") || val.includes("db.")) {
+            portBox.value = 3306;
+        } else if (val === "8.8.8.8" || val === "1.1.1.1" || val.includes("dns")) {
+            portBox.value = 53;
+        } else {
+            portBox.value = 80;
+        }
+    }
+
+    function filterTable() {
+        var input = document.getElementById("searchInput").value.toLowerCase();
+        var rows = document.querySelectorAll("#serverTable tbody tr");
+        rows.forEach(function(row) {
+            var text = row.textContent.toLowerCase();
+            row.style.display = text.indexOf(input) > -1 ? "" : "none";
+        });
+    }
+
+    function openEditModal(id, ad, ip, port) {
+        document.getElementById("editForm").action = "/duzenle/" + id;
+        document.getElementById("edit_ad").value = ad;
+        document.getElementById("edit_ip").value = ip;
+        document.getElementById("edit_port").value = port;
+        document.getElementById("editModal").style.display = "flex";
+    }
+
+    function closeEditModal() {
+        document.getElementById("editModal").style.display = "none";
+    }
+
+    // SAYFAYI YENİLEMEDEN ANLIK CANLI VERİ GÜNCELLEME
+    function canliVerileriGuncelle() {
+        // Düzenleme penceresi açıksa tabloyu oynatma
+        if (document.getElementById("editModal") && document.getElementById("editModal").style.display === "flex") {
+            return;
+        }
+
+        fetch('/api/durum')
+            .then(res => res.json())
+            .then(data => {
+                if (data.hata) return;
+
+                // 1. İstatistik Kartlarını Güncelle
+                var kartlar = document.querySelectorAll(".card .num");
+                if (kartlar.length >= 3) {
+                    kartlar[0].innerText = data.istatistik.toplam;
+                    kartlar[1].innerText = data.istatistik.aktif;
+                    kartlar[2].innerText = data.istatistik.kapali;
                 }
-            }
 
-            // Minecraft sunucu kalıpları
-            if (val.includes("mc.") || val.includes("minecraft") || val.includes("craft") || val.includes("hypixel")) {
-                portBox.value = 25565;
-            }
-            // HTTPS bağlantısı
-            else if (val.startsWith("https://")) {
-                portBox.value = 443;
-            }
-            // SSH / Güvenli kabuk
-            else if (val.includes("ssh.") || val.includes("vpn.")) {
-                portBox.value = 22;
-            }
-            // Veritabanı
-            else if (val.includes("mysql") || val.includes("sql") || val.includes("db.")) {
-                portBox.value = 3306;
-            }
-            // DNS sunucusu (1.1.1.1 veya 8.8.8.8 gibi meşhur IP'ler)
-            else if (val === "8.8.8.8" || val === "1.1.1.1" || val.includes("dns")) {
-                portBox.value = 53;
-            }
-            // Standart web siteleri
-            else {
-                portBox.value = 80;
-            }
-        }
+                // 2. Tabloyu Sessizce Yenile
+                var tbody = document.querySelector("#serverTable tbody");
+                if (!tbody) return;
 
-        function filterTable() {
-            var input = document.getElementById("searchInput").value.toLowerCase();
-            var rows = document.querySelectorAll("#serverTable tbody tr");
-            rows.forEach(function(row) {
-                var text = row.textContent.toLowerCase();
-                row.style.display = text.indexOf(input) > -1 ? "" : "none";
-            });
-        }
+                if (data.sunucular.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td></tr>';
+                } else {
+                    var yeniHtml = "";
+                    data.sunucular.forEach(s => {
+                        var rozetSinifi = "unknown";
+                        if (s.durum === "Çalışıyor" && s.gecikme < 60) rozetSinifi = "fast";
+                        else if (s.durum === "Çalışıyor") rozetSinifi = "medium";
+                        else if (s.durum.startsWith("Erişilemiyor") || s.durum.includes("Hata")) rozetSinifi = "down";
 
-        function openEditModal(id, ad, ip, port) {
-            document.getElementById("editForm").action = "/duzenle/" + id;
-            document.getElementById("edit_ad").value = ad;
-            document.getElementById("edit_ip").value = ip;
-            document.getElementById("edit_port").value = port;
-            document.getElementById("editModal").style.display = "flex";
-        }
+                        yeniHtml += `
+                        <tr>
+                            <td><strong>${s.sunucu_adi}</strong></td>
+                            <td><code>${s.ip_adresi}:${s.port}</code></td>
+                            <td><span class="badge ${rozetSinifi}">${s.durum}</span></td>
+                            <td><strong>${s.gecikme} ms</strong></td>
+                            <td>${s.son_kontrol}</td>
+                            <td>
+                                <a href="/ping/${s.id}" class="btn-ping">Test Et</a>
+                                <button class="btn-edit" onclick="openEditModal('${s.id}', '${s.sunucu_adi}', '${s.ip_adresi}', '${s.port}')">Düzenle</button>
+                                <a href="/sil/${s.id}" class="btn-del" onclick="return confirm('Silmek istediğinize emin misiniz?')">Sil</a>
+                            </td>
+                        </tr>`;
+                    });
+                    tbody.innerHTML = yeniHtml;
+                    filterTable(); // Kullanıcı arama yapmışsa filtreyi koru
+                }
 
-        function closeEditModal() {
-            document.getElementById("editModal").style.display = "none";
-        }
+                // 3. Logları Güncelle
+                var logBox = document.querySelector(".log-section");
+                if (logBox) {
+                    var logHtml = "<h4>Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>";
+                    if (data.loglar.length === 0) {
+                        logHtml += '<div class="log-item">Henüz log kaydı bulunmuyor.</div>';
+                    } else {
+                        data.loglar.forEach(l => {
+                            logHtml += `<div class="log-item">[${l.tarih}] - ${l.islem}</div>`;
+                        });
+                    }
+                    logBox.innerHTML = logHtml;
+                }
+            })
+            .catch(err => console.log("Canlı veri hatası:", err));
+    }
 
-        setInterval(function() {
-            var isModalOpen = document.getElementById("editModal").style.display === "flex";
-            var isSearching = document.getElementById("searchInput").value.trim().length > 0;
-            var isTyping = document.getElementById("ipInput") === document.activeElement;
-            if (!isModalOpen && !isSearching && !isTyping) {
-                location.reload();
-            }
-        }, 15000);
-    </script>
+    // Her 10 saniyede bir arka planda sessizce çek (sayfa asla yenilenmez)
+    setInterval(canliVerileriGuncelle, 10000);
+</script>
 </body>
 </html>
