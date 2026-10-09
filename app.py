@@ -4,12 +4,17 @@ import socket
 import time
 import threading
 import requests
+import os
 from urllib.parse import urlparse
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = "bulut-operasyon-yonetim-anahtari"
-DB_NAME = "envanter.db"
+
+# Veritabanını AWS diskiyle köprüleyeceğimiz kalıcı klasör yolu
+DATA_DIR = "/app/data"
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_NAME = os.path.join(DATA_DIR, "envanter.db")
 
 ADMIN_USER = "admin"
 ADMIN_PASS = "bulut123"
@@ -58,14 +63,13 @@ def ping_server(hedef, port):
     port = int(port)
     basla = time.time()
 
-    # 1. Aşama: DNS Çözümleme Kontrolü
-    # Var olmayan bir adresi doğrudan eler
+    # DNS Çözümleme kontrolü
     try:
         ip = socket.gethostbyname(hedef)
     except socket.gaierror:
         return "Erişilemiyor (DNS Hatası)", 0
 
-    # 2. Aşama: Web Siteleri (Port 80 ve 443) İçin HTTP Doğrulaması
+    # HTTP/HTTPS Web Kontrolü (Port 80 veya 443)
     if port in [80, 443]:
         sema = "https" if port == 443 else "http"
         url = f"{sema}://{hedef}"
@@ -77,8 +81,6 @@ def ping_server(hedef, port):
                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
             )
             gecikme = int((time.time() - basla) * 1000)
-            
-            # Sadece 2xx ve 3xx başarılı sayılır, 4xx/5xx erişilemez
             if resp.status_code < 400:
                 return "Çalışıyor", gecikme
             else:
@@ -86,8 +88,7 @@ def ping_server(hedef, port):
         except requests.RequestException:
             return "Erişilemiyor", 0
 
-    # 3. Aşama: Özel Servisler (Minecraft 25565, SSH 22, Veritabanı 3306 vb.)
-    # Doğrudan hedeflenen IP ve Port'a TCP el sıkışması yapar
+    # Özel Servis Kontrolü (Minecraft 25565, SSH 22, Port 53 vb.)
     else:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(2.0)
@@ -104,13 +105,23 @@ def otomatik_kontrol_dongusu():
         try:
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
-            c.execute("SELECT id, ip_adresi, port, sunucu_adi FROM sunucular")
+            c.execute("SELECT id, ip_adresi, port, sunucu_adi, durum FROM sunucular")
             sunucular = c.fetchall()
 
             simdi = datetime.now().strftime("%H:%M:%S")
-            for s_id, hedef, port, ad in sunucular:
-                durum, gecikme = ping_server(hedef, port)
-                c.execute("UPDATE sunucular SET durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (durum, gecikme, simdi, s_id))
+            for s_id, hedef, port, ad, eski_durum in sunucular:
+                yeni_durum, gecikme = ping_server(hedef, port)
+                c.execute("UPDATE sunucular SET durum = ?, gecikme = ?, son_kontrol = ? WHERE id = ?", (yeni_durum, gecikme, simdi, s_id))
+
+                # Sen sitede yokken bile kesintiyi ve geri gelmeyi günlüğe yazar
+                if eski_durum != 'Bilinmiyor' and eski_durum != yeni_durum:
+                    tam_tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if yeni_durum.startswith("Erişilemiyor") or "Hata" in yeni_durum:
+                        c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", 
+                                  (f"🚨 KESİNTİ: '{ad}' servisine erişim koptu! ({yeni_durum})", tam_tarih))
+                    elif yeni_durum == "Çalışıyor":
+                        c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", 
+                                  (f"✅ KURTARILDI: '{ad}' servisi tekrar erişilebilir duruma geldi ({gecikme}ms).", tam_tarih))
 
             conn.commit()
             conn.close()
@@ -147,7 +158,7 @@ def index():
     c.execute("SELECT * FROM sunucular")
     sunucular = c.fetchall()
 
-    c.execute("SELECT * FROM loglar ORDER BY id DESC LIMIT 5")
+    c.execute("SELECT * FROM loglar ORDER BY id DESC LIMIT 10")
     son_loglar = c.fetchall()
 
     toplam = len(sunucular)
@@ -174,7 +185,7 @@ def ekle():
         c.execute("INSERT INTO sunucular (sunucu_adi, ip_adresi, port, durum, gecikme, son_kontrol) VALUES (?, ?, ?, ?, ?, ?)", (ad, ip, port, durum, gecikme, simdi))
         conn.commit()
         conn.close()
-        log_ekle(f"Yeni altyapı eklendi: {ad} ({ip}:{port}) - Durum: {durum}")
+        log_ekle(f"Yeni altyapı eklendi: {ad} ({ip}:{port})")
     return redirect(url_for('index'))
 
 @app.route('/duzenle/<int:id>', methods=['POST'])
