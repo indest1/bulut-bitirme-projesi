@@ -30,7 +30,7 @@ def telegram_bildir(mesaj):
         return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj, "parse_mode": "HTML"}
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mesaj}
         requests.post(url, json=payload, timeout=5.0)
     except Exception as e:
         print(f"Telegram gonderim hatasi: {e}")
@@ -122,7 +122,6 @@ def ping_server(hedef, port):
         sema = "https" if port == 443 else "http"
         url = f"{sema}://{hedef}"
         try:
-            # Gerçek Masaüstü Chrome gibi davranarak bot engellerini aşar
             tarayici_basligi = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
@@ -131,7 +130,7 @@ def ping_server(hedef, port):
                 url, 
                 timeout=4.0, 
                 allow_redirects=True, 
-                stream=True,  # Sayfa icerigini indirmeden sadece baglanti durumunu alir
+                stream=True,
                 headers=tarayici_basligi
             )
             gecikme = int((time.time() - basla) * 1000)
@@ -178,13 +177,13 @@ def otomatik_kontrol_dongusu():
                 if eski_durum != 'Bilinmiyor' and eski_durum != yeni_durum:
                     tam_tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     if yeni_durum.startswith("Erisilemiyor") or "Hata" in yeni_durum:
-                        mesaj = f"🚨 KESINTI: '{ad}' servisine erisim koptu! ({yeni_durum})"
+                        mesaj = f"KESINTI: '{ad}' servisine erisim koptu! ({yeni_durum})"
                         c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", (mesaj, tam_tarih))
-                        telegram_bildir(f"🚨 <b>CLOUDOPS ALARM: KESİNTİ!</b>\n\n<b>Sunucu:</b> {ad}\n<b>Adres:</b> {hedef}:{port}\n<b>Durum:</b> {yeni_durum}\n<b>Zaman:</b> {tam_tarih}")
+                        telegram_bildir(f"🚨 CLOUDOPS ALARM: KESİNTİ!\n\nSunucu: {ad}\nAdres: {hedef}:{port}\nDurum: {yeni_durum}\nZaman: {tam_tarih}")
                     elif yeni_durum == "Calisiyor":
-                        mesaj = f"✅ KURTARILDI: '{ad}' servisi tekrar erisilebilir duruma geldi ({gecikme}ms)."
+                        mesaj = f"KURTARILDI: '{ad}' servisi tekrar erisilebilir duruma geldi ({gecikme}ms)."
                         c.execute("INSERT INTO loglar (islem, tarih) VALUES (?, ?)", (mesaj, tam_tarih))
-                        telegram_bildir(f"✅ <b>CLOUDOPS: SERVİS KURTARILDI</b>\n\n<b>Sunucu:</b> {ad}\n<b>Adres:</b> {hedef}:{port}\n<b>Gecikme:</b> {gecikme} ms\n<b>Zaman:</b> {tam_tarih}")
+                        telegram_bildir(f"✅ CLOUDOPS: SERVİS KURTARILDI\n\nSunucu: {ad}\nAdres: {hedef}:{port}\nGecikme: {gecikme} ms\nZaman: {tam_tarih}")
 
             conn.commit()
             conn.close()
@@ -212,18 +211,18 @@ def saatlik_rapor_dongusu():
             disk = psutil.disk_usage('/').percent
             zaman = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-            mesaj = f"📊 <b>CLOUDOPS SAATLİK ALTYAPI RAPORU</b>\n"
-            mesaj += f"🕒 <i>Tarih: {zaman}</i>\n\n"
-            mesaj += f"🖥 <b>Host Kaynakları:</b> CPU: %{cpu} | RAM: %{ram} | Disk: %{disk}\n"
-            mesaj += f"📈 <b>Varlık Özeti:</b> Toplam: {toplam} | Aktif: {aktif} | Kapalı: {kapali}\n\n"
-            mesaj += "📋 <b>Servis Durumları:</b>\n"
+            mesaj = f"📊 CLOUDOPS SAATLİK ALTYAPI RAPORU\n"
+            mesaj += f"🕒 Tarih: {zaman}\n\n"
+            mesaj += f"🖥 Host Kaynakları: CPU: %{cpu} | RAM: %{ram} | Disk: %{disk}\n"
+            mesaj += f"📈 Varlık Özeti: Toplam: {toplam} | Aktif: {aktif} | Kapalı: {kapali}\n\n"
+            mesaj += "📋 Servis Durumları:\n"
 
             if not sunucular:
-                mesaj += "<i>Kayıtlı sunucu bulunmuyor.</i>"
+                mesaj += "Kayıtlı sunucu bulunmuyor."
             else:
                 for s in sunucular:
                     simge = "🟢" if s[1] == "Calisiyor" else "🔴"
-                    mesaj += f"{simge} <b>{s[0]}</b> ({s[4]}:{s[3]}): {s[1]} ({s[2]}ms)\n"
+                    mesaj += f"{simge} {s[0]} ({s[4]}:{s[3]}): {s[1]} ({s[2]}ms)\n"
 
             telegram_bildir(mesaj)
         except Exception as e:
@@ -371,16 +370,15 @@ def duzenle(id):
     yeni_ip = hedefi_temizle(request.form['ip_adresi'])
     yeni_port = int(request.form.get('port', 80))
 
-    durum, gecikme, ssl_gun = ping_server(yeni_ip, yeni_port)
-    simdi = datetime.now().strftime("%H:%M:%S")
-
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
+    # Adres degistiginde arka plan tarayicisinin durumu yakalayabilmesi icin
+    # durum 'Bilinmiyor' olarak isaretlenir
     c.execute("""
         UPDATE sunucular 
-        SET sunucu_adi = ?, ip_adresi = ?, port = ?, durum = ?, gecikme = ?, son_kontrol = ?, ssl_gun = ?
+        SET sunucu_adi = ?, ip_adresi = ?, port = ?
         WHERE id = ?
-    """, (yeni_ad, yeni_ip, yeni_port, durum, gecikme, simdi, ssl_gun, id))
+    """, (yeni_ad, yeni_ip, yeni_port, id))
     conn.commit()
     conn.close()
     log_ekle(f"Sunucu guncellendi (ID: {id}): {yeni_ad}")
@@ -393,16 +391,17 @@ def ping(id):
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT ip_adresi, port, sunucu_adi, toplam_kontrol, basarili_kontrol FROM sunucular WHERE id = ?", (id,))
+    c.execute("SELECT ip_adresi, port, sunucu_adi, toplam_kontrol, basarili_kontrol, durum FROM sunucular WHERE id = ?", (id,))
     row = c.fetchone()
 
     if row:
-        ip, port, ad, t_sayi, b_sayi = row
+        ip, port, ad, t_sayi, b_sayi, eski_durum = row
         durum, gecikme, ssl_gun = ping_server(ip, port)
         simdi = datetime.now().strftime("%H:%M:%S")
         t_sayi = (t_sayi or 0) + 1
         if durum == "Calisiyor":
             b_sayi = (b_sayi or 0) + 1
+
         c.execute("""
             UPDATE sunucular 
             SET durum = ?, gecikme = ?, son_kontrol = ?, toplam_kontrol = ?, basarili_kontrol = ?, ssl_gun = ?
@@ -410,6 +409,14 @@ def ping(id):
         """, (durum, gecikme, simdi, t_sayi, b_sayi, ssl_gun, id))
         conn.commit()
         log_ekle(f"Manuel test: {ad} -> {durum} ({gecikme}ms)")
+
+        # Manuel testte durum degisimi varsa da anlik bildir
+        if eski_durum != 'Bilinmiyor' and eski_durum != durum:
+            tam_tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if durum.startswith("Erisilemiyor") or "Hata" in durum:
+                telegram_bildir(f"🚨 CLOUDOPS ALARM: KESİNTİ!\n\nSunucu: {ad}\nAdres: {ip}:{port}\nDurum: {durum}\nZaman: {tam_tarih}")
+            elif durum == "Calisiyor":
+                telegram_bildir(f"✅ CLOUDOPS: SERVİS KURTARILDI\n\nSunucu: {ad}\nAdres: {ip}:{port}\nGecikme: {gecikme} ms\nZaman: {tam_tarih}")
 
     conn.close()
     return redirect(url_for('index'))
