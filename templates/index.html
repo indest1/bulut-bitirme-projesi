@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>CloudOps - Bulut Altyapı & İzleme Platformu</title>
+    <title>CloudOps - Bulut Altyapı & Gözlemlenebilirlik Platformu</title>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 25px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -14,9 +14,12 @@
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
         .logout-btn { background: #5f6368; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; }
 
-        .banner { padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 10px; }
-        .banner-danger { background-color: #fce8e6; color: #d93025; border: 1px solid #fad2cf; }
-        .banner-success { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+        /* HOST METRIKLERI */
+        .system-metrics { display: flex; gap: 15px; margin-bottom: 20px; }
+        .metric-card { flex: 1; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .metric-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; color: #555; margin-bottom: 8px; }
+        .progress-bar-bg { width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; width: 0%; background: #1a73e8; transition: width 0.5s ease; }
 
         .cards { display: flex; gap: 15px; margin-bottom: 25px; }
         .card { flex: 1; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: center; }
@@ -28,7 +31,7 @@
         .main-box { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
         .actions-bar { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
         form.add-form { display: flex; gap: 10px; flex: 2; min-width: 320px; align-items: center; }
-        input, select, button { padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        input, button { padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
         button { background: #1a73e8; color: white; border: none; cursor: pointer; font-weight: bold; }
         
         .btn-group { display: flex; gap: 10px; }
@@ -47,12 +50,14 @@
         .down { background: #fce8e6; color: #d93025; }
         .unknown { background: #f1f3f4; color: #5f6368; }
 
+        .badge-ssl { background: #e8f0fe; color: #1967d2; font-family: monospace; font-size: 11px; padding: 3px 6px; border-radius: 4px; }
+        .badge-ssl-warn { background: #fef7e0; color: #b06000; font-family: monospace; font-size: 11px; padding: 3px 6px; border-radius: 4px; }
+
         .btn-ping { background: #e8f0fe; color: #1a73e8; padding: 6px 10px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; margin-right: 4px; }
         .btn-edit { background: #f1f3f4; color: #3c4043; padding: 6px 10px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; cursor: pointer; border: none; }
         .btn-del { color: #d93025; text-decoration: none; font-weight: bold; font-size: 13px; margin-left: 8px; }
 
         .log-section { margin-top: 25px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .log-section h4 { margin: 0 0 12px 0; color: #444; }
         .log-item { font-family: monospace; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; color: #555; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; }
@@ -62,37 +67,52 @@
 <body>
     <div class="header">
         <div class="title">
-            <h2>CloudOps - Altyapı Envanter & Sağlık Merkezi</h2>
+            <h2>CloudOps - Altyapı Envanter & Gözlemlenebilirlik Merkezi</h2>
             <p>Bulut Bilişim Operatörlüğü Bitirme Projesi</p>
         </div>
         <div class="header-right">
-            <div class="live-badge"><span class="live-dot"></span> Canlı İzleme: 15s</div>
+            <div class="live-badge"><span class="live-dot"></span> Canlı İzleme: 10s</div>
             <a href="/logout" class="logout-btn">Çıkış Yap</a>
         </div>
     </div>
 
-    {% if kapali > 0 %}
-        <div class="banner banner-danger">
-            ⚠ <strong>KRİTİK UYARI:</strong> {{ kapali }} adet altyapı servisine ulaşılamıyor! Müdahale gerekiyor.
+    <!-- HOST SUNUCU DONANIM METRIKLERI -->
+    <div class="system-metrics">
+        <div class="metric-card">
+            <div class="metric-header">
+                <span>AWS EC2 CPU Yükü</span>
+                <span id="cpuText">-%</span>
+            </div>
+            <div class="progress-bar-bg"><div id="cpuBar" class="progress-bar-fill"></div></div>
         </div>
-    {% elif toplam > 0 %}
-        <div class="banner banner-success">
-            ✅ <strong>SİSTEM SAĞLIKLI:</strong> Tüm altyapı servisleri nominal ve erişilebilir durumda.
+        <div class="metric-card">
+            <div class="metric-header">
+                <span>RAM Bellek Kullanımı</span>
+                <span id="ramText">-%</span>
+            </div>
+            <div class="progress-bar-bg"><div id="ramBar" class="progress-bar-fill"></div></div>
         </div>
-    {% endif %}
+        <div class="metric-card">
+            <div class="metric-header">
+                <span>Disk Doluluk Oranı</span>
+                <span id="diskText">-%</span>
+            </div>
+            <div class="progress-bar-bg"><div id="diskBar" class="progress-bar-fill"></div></div>
+        </div>
+    </div>
 
     <div class="cards">
         <div class="card">
             <h4>Toplam Varlık</h4>
-            <div class="num">{{ toplam }}</div>
+            <div class="num" id="statToplam">{{ toplam }}</div>
         </div>
         <div class="card active">
             <h4>Erişilebilir (UP)</h4>
-            <div class="num">{{ aktif }}</div>
+            <div class="num" id="statAktif">{{ aktif }}</div>
         </div>
         <div class="card down">
             <h4>Erişilemeyen (DOWN)</h4>
-            <div class="num">{{ kapali }}</div>
+            <div class="num" id="statKapali">{{ kapali }}</div>
         </div>
     </div>
 
@@ -100,13 +120,13 @@
         <div class="actions-bar">
             <form action="/ekle" method="POST" class="add-form">
                 <input type="text" name="sunucu_adi" placeholder="Sunucu Adı (Örn: Web-Node-01)" required style="flex: 1.5;">
-                <input type="text" id="ipInput" name="ip_adresi" placeholder="IP / Alan Adı (Örn: mc.hypixel.net)" required oninput="otomatikPortAta()" style="flex: 2;">
+                <input type="text" id="ipInput" name="ip_adresi" placeholder="IP / Alan Adı (Örn: google.com)" required oninput="otomatikPortAta()" style="flex: 2;">
                 <input type="number" id="portInput" name="port" placeholder="Port" value="80" style="width: 85px;" required title="Port otomatik önerilir, elle değiştirebilirsiniz.">
                 <button type="submit">+ Ekle</button>
             </form>
             <div class="btn-group">
                 <a href="/tara-hepsi" class="scan-all-btn">⚡ Tümünü Tara</a>
-                <a href="/export" class="export-btn">📥 CSV İndir</a>
+                <a href="/export" class="export-btn">📥 SLA Raporu (CSV)</a>
             </div>
         </div>
 
@@ -116,9 +136,11 @@
             <thead>
                 <tr>
                     <th>Sunucu Adı</th>
-                    <th>Hedef Adres & Port</th>
+                    <th>Hedef & Port</th>
                     <th>Durum</th>
                     <th>Gecikme</th>
+                    <th>SLA / Uptime</th>
+                    <th>SSL Durumu</th>
                     <th>Son Kontrol</th>
                     <th>İşlemler</th>
                 </tr>
@@ -129,11 +151,23 @@
                     <td><strong>{{ s[1] }}</strong></td>
                     <td><code>{{ s[2] }}:{{ s[3] }}</code></td>
                     <td>
-                        <span class="badge {% if s[4] == 'Çalışıyor' and s[5] < 60 %}fast{% elif s[4] == 'Çalışıyor' %}medium{% elif s[4] == 'Erişilemiyor' or 'Hata' in s[4] %}down{% else %}unknown{% endif %}">
+                        <span class="badge {% if s[4] == 'Calisiyor' and s[5] < 60 %}fast{% elif s[4] == 'Calisiyor' %}medium{% elif s[4] == 'Erisilemiyor' or 'Hata' in s[4] %}down{% else %}unknown{% endif %}">
                             {{ s[4] }}
                         </span>
                     </td>
                     <td><strong>{{ s[5] }} ms</strong></td>
+                    <td>
+                        {% set total = s[7] or 1 %}
+                        {% set success = s[8] or 0 %}
+                        <strong>%{{ "%.1f"|format((success / total) * 100) }}</strong>
+                    </td>
+                    <td>
+                        {% if s[9] is defined and s[9] >= 0 %}
+                            <span class="badge-ssl {% if s[9] < 15 %}badge-ssl-warn{% endif %}">🔒 {{ s[9] }} gün</span>
+                        {% else %}
+                            <span style="color: #999; font-size: 12px;">N/A</span>
+                        {% endif %}
+                    </td>
                     <td>{{ s[6] or '-' }}</td>
                     <td>
                         <a href="/ping/{{ s[0] }}" class="btn-ping">Test Et</a>
@@ -143,7 +177,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="6" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td>
+                    <td colspan="8" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -166,141 +200,154 @@
         </div>
     </div>
 
-   <div class="log-section">
+    <!-- Log Bölümü (Salt Okunur) -->
+    <div class="log-section">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <h4 style="margin: 0; color: #444;">Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>
             <a href="/loglar" style="color: #1a73e8; font-size: 13px; text-decoration: none; font-weight: bold;">Tüm Olay Günlüğünü Gör (Ayrı Sayfa) ➡</a>
         </div>
-        {% for l in loglar %}
-            <div class="log-item">[{{ l[2] }}] - {{ l[1] }}</div>
-        {% else %}
-            <div class="log-item">Henüz log kaydı bulunmuyor.</div>
-        {% endfor %}
+        <div id="logItemsContainer">
+            {% for l in loglar %}
+                <div class="log-item">[{{ l[1] }}] - {{ l[0] }}</div>
+            {% else %}
+                <div class="log-item">Henüz log kaydı bulunmuyor.</div>
+            {% endfor %}
+        </div>
     </div>
 
     <script>
-    // Akıllı Port Tahmini
-    function otomatikPortAta() {
-        var ipInput = document.getElementById("ipInput");
-        if (!ipInput) return;
-        var val = ipInput.value.trim().toLowerCase();
-        var portBox = document.getElementById("portInput");
+        function otomatikPortAta() {
+            var val = document.getElementById("ipInput").value.trim().toLowerCase();
+            var portBox = document.getElementById("portInput");
 
-        if (val.includes(":") && !val.startsWith("http")) {
-            var parcalar = val.split(":");
-            if (parcalar[1] && !isNaN(parcalar[1])) {
-                portBox.value = parcalar[1];
-                return;
+            if (val.includes(":") && !val.startsWith("http")) {
+                var parcalar = val.split(":");
+                if (parcalar[1] && !isNaN(parcalar[1])) {
+                    portBox.value = parcalar[1];
+                    return;
+                }
+            }
+
+            if (val.includes("mc.") || val.includes("minecraft") || val.includes("craft") || val.includes("hypixel")) {
+                portBox.value = 25565;
+            } else if (val.startsWith("https://")) {
+                portBox.value = 443;
+            } else if (val.includes("ssh.") || val.includes("vpn.")) {
+                portBox.value = 22;
+            } else if (val.includes("mysql") || val.includes("sql") || val.includes("db.")) {
+                portBox.value = 3306;
+            } else if (val === "8.8.8.8" || val === "1.1.1.1" || val.includes("dns")) {
+                portBox.value = 53;
+            } else {
+                portBox.value = 80;
             }
         }
 
-        if (val.includes("mc.") || val.includes("minecraft") || val.includes("craft") || val.includes("hypixel")) {
-            portBox.value = 25565;
-        } else if (val.startsWith("https://")) {
-            portBox.value = 443;
-        } else if (val.includes("ssh.") || val.includes("vpn.")) {
-            portBox.value = 22;
-        } else if (val.includes("mysql") || val.includes("sql") || val.includes("db.")) {
-            portBox.value = 3306;
-        } else if (val === "8.8.8.8" || val === "1.1.1.1" || val.includes("dns")) {
-            portBox.value = 53;
-        } else {
-            portBox.value = 80;
-        }
-    }
-
-    function filterTable() {
-        var input = document.getElementById("searchInput").value.toLowerCase();
-        var rows = document.querySelectorAll("#serverTable tbody tr");
-        rows.forEach(function(row) {
-            var text = row.textContent.toLowerCase();
-            row.style.display = text.indexOf(input) > -1 ? "" : "none";
-        });
-    }
-
-    function openEditModal(id, ad, ip, port) {
-        document.getElementById("editForm").action = "/duzenle/" + id;
-        document.getElementById("edit_ad").value = ad;
-        document.getElementById("edit_ip").value = ip;
-        document.getElementById("edit_port").value = port;
-        document.getElementById("editModal").style.display = "flex";
-    }
-
-    function closeEditModal() {
-        document.getElementById("editModal").style.display = "none";
-    }
-
-    // SAYFAYI YENİLEMEDEN ANLIK CANLI VERİ GÜNCELLEME
-    function canliVerileriGuncelle() {
-        // Düzenleme penceresi açıksa tabloyu oynatma
-        if (document.getElementById("editModal") && document.getElementById("editModal").style.display === "flex") {
-            return;
+        function filterTable() {
+            var input = document.getElementById("searchInput").value.toLowerCase();
+            var rows = document.querySelectorAll("#serverTable tbody tr");
+            rows.forEach(function(row) {
+                var text = row.textContent.toLowerCase();
+                row.style.display = text.indexOf(input) > -1 ? "" : "none";
+            });
         }
 
-        fetch('/api/durum')
-            .then(res => res.json())
-            .then(data => {
-                if (data.hata) return;
+        function openEditModal(id, ad, ip, port) {
+            document.getElementById("editForm").action = "/duzenle/" + id;
+            document.getElementById("edit_ad").value = ad;
+            document.getElementById("edit_ip").value = ip;
+            document.getElementById("edit_port").value = port;
+            document.getElementById("editModal").style.display = "flex";
+        }
 
-                // 1. İstatistik Kartlarını Güncelle
-                var kartlar = document.querySelectorAll(".card .num");
-                if (kartlar.length >= 3) {
-                    kartlar[0].innerText = data.istatistik.toplam;
-                    kartlar[1].innerText = data.istatistik.aktif;
-                    kartlar[2].innerText = data.istatistik.kapali;
-                }
+        function closeEditModal() {
+            document.getElementById("editModal").style.display = "none";
+        }
 
-                // 2. Tabloyu Sessizce Yenile
-                var tbody = document.querySelector("#serverTable tbody");
-                if (!tbody) return;
+        function canliVerileriGuncelle() {
+            if (document.getElementById("editModal") && document.getElementById("editModal").style.display === "flex") {
+                return;
+            }
 
-                if (data.sunucular.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td></tr>';
-                } else {
-                    var yeniHtml = "";
-                    data.sunucular.forEach(s => {
-                        var rozetSinifi = "unknown";
-                        if (s.durum === "Çalışıyor" && s.gecikme < 60) rozetSinifi = "fast";
-                        else if (s.durum === "Çalışıyor") rozetSinifi = "medium";
-                        else if (s.durum.startsWith("Erişilemiyor") || s.durum.includes("Hata")) rozetSinifi = "down";
+            fetch('/api/durum')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.hata) return;
 
-                        yeniHtml += `
-                        <tr>
-                            <td><strong>${s.sunucu_adi}</strong></td>
-                            <td><code>${s.ip_adresi}:${s.port}</code></td>
-                            <td><span class="badge ${rozetSinifi}">${s.durum}</span></td>
-                            <td><strong>${s.gecikme} ms</strong></td>
-                            <td>${s.son_kontrol}</td>
-                            <td>
-                                <a href="/ping/${s.id}" class="btn-ping">Test Et</a>
-                                <button class="btn-edit" onclick="openEditModal('${s.id}', '${s.sunucu_adi}', '${s.ip_adresi}', '${s.port}')">Düzenle</button>
-                                <a href="/sil/${s.id}" class="btn-del" onclick="return confirm('Silmek istediğinize emin misiniz?')">Sil</a>
-                            </td>
-                        </tr>`;
-                    });
-                    tbody.innerHTML = yeniHtml;
-                    filterTable(); // Kullanıcı arama yapmışsa filtreyi koru
-                }
-
-                // 3. Logları Güncelle
-                var logBox = document.querySelector(".log-section");
-                if (logBox) {
-                    var logHtml = "<h4>Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>";
-                    if (data.loglar.length === 0) {
-                        logHtml += '<div class="log-item">Henüz log kaydı bulunmuyor.</div>';
-                    } else {
-                        data.loglar.forEach(l => {
-                            logHtml += `<div class="log-item">[${l.tarih}] - ${l.islem}</div>`;
-                        });
+                    // 1. Host Metrikleri
+                    if (data.sistem) {
+                        document.getElementById("cpuText").innerText = "%" + data.sistem.cpu;
+                        document.getElementById("cpuBar").style.width = data.sistem.cpu + "%";
+                        document.getElementById("ramText").innerText = "%" + data.sistem.ram;
+                        document.getElementById("ramBar").style.width = data.sistem.ram + "%";
+                        document.getElementById("diskText").innerText = "%" + data.sistem.disk;
+                        document.getElementById("diskBar").style.width = data.sistem.disk + "%";
                     }
-                    logBox.innerHTML = logHtml;
-                }
-            })
-            .catch(err => console.log("Canlı veri hatası:", err));
-    }
 
-    // Her 10 saniyede bir arka planda sessizce çek (sayfa asla yenilenmez)
-    setInterval(canliVerileriGuncelle, 10000);
-</script>
+                    // 2. Kartlar
+                    document.getElementById("statToplam").innerText = data.istatistik.toplam;
+                    document.getElementById("statAktif").innerText = data.istatistik.aktif;
+                    document.getElementById("statKapali").innerText = data.istatistik.kapali;
+
+                    // 3. Tablo
+                    var tbody = document.querySelector("#serverTable tbody");
+                    if (tbody) {
+                        if (data.sunucular.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #888;">Henüz kayıtlı bir altyapı varlığı yok.</td></tr>';
+                        } else {
+                            var yeniHtml = "";
+                            data.sunucular.forEach(s => {
+                                var rozetSinifi = "unknown";
+                                if (s.durum === "Calisiyor" && s.gecikme < 60) rozetSinifi = "fast";
+                                else if (s.durum === "Calisiyor") rozetSinifi = "medium";
+                                else if (s.durum.startsWith("Erisilemiyor") || s.durum.includes("Hata")) rozetSinifi = "down";
+
+                                var sslHtml = '<span style="color: #999; font-size: 12px;">N/A</span>';
+                                if (s.ssl_gun >= 0) {
+                                    var warnClass = s.ssl_gun < 15 ? "badge-ssl-warn" : "";
+                                    sslHtml = `<span class="badge-ssl ${warnClass}">🔒 ${s.ssl_gun} gün</span>`;
+                                }
+
+                                yeniHtml += `
+                                <tr>
+                                    <td><strong>${s.sunucu_adi}</strong></td>
+                                    <td><code>${s.ip_adresi}:${s.port}</code></td>
+                                    <td><span class="badge ${rozetSinifi}">${s.durum}</span></td>
+                                    <td><strong>${s.gecikme} ms</strong></td>
+                                    <td><strong>%${s.uptime}</strong></td>
+                                    <td>${sslHtml}</td>
+                                    <td>${s.son_kontrol}</td>
+                                    <td>
+                                        <a href="/ping/${s.id}" class="btn-ping">Test Et</a>
+                                        <button class="btn-edit" onclick="openEditModal('${s.id}', '${s.sunucu_adi}', '${s.ip_adresi}', '${s.port}')">Düzenle</button>
+                                        <a href="/sil/${s.id}" class="btn-del" onclick="return confirm('Silmek istediğinize emin misiniz?')">Sil</a>
+                                    </td>
+                                </tr>`;
+                            });
+                            tbody.innerHTML = yeniHtml;
+                            filterTable();
+                        }
+                    }
+
+                    // 4. Loglar
+                    var logContainer = document.getElementById("logItemsContainer");
+                    if (logContainer) {
+                        if (data.loglar.length === 0) {
+                            logContainer.innerHTML = '<div class="log-item">Henüz log kaydı bulunmuyor.</div>';
+                        } else {
+                            var logHtml = "";
+                            data.loglar.forEach(l => {
+                                logHtml += `<div class="log-item">[${l.tarih}] - ${l.islem}</div>`;
+                            });
+                            logContainer.innerHTML = logHtml;
+                        }
+                    }
+                })
+                .catch(err => console.log("Canlı veri hatası:", err));
+        }
+
+        setInterval(canliVerileriGuncelle, 10000);
+        canliVerileriGuncelle();
+    </script>
 </body>
 </html>
