@@ -166,8 +166,11 @@
         </div>
     </div>
 
-    <div class="log-section">
-        <h4>Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>
+   <div class="log-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="margin: 0; color: #444;">Sistem Operasyon Günlüğü (Son 5 İşlem)</h4>
+            <a href="/loglar" style="color: #1a73e8; font-size: 13px; text-decoration: none; font-weight: bold;">Tüm Olay Günlüğünü Gör (Ayrı Sayfa) ➡</a>
+        </div>
         {% for l in loglar %}
             <div class="log-item">[{{ l[2] }}] - {{ l[1] }}</div>
         {% else %}
