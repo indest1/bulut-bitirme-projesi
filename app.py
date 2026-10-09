@@ -22,8 +22,8 @@ ADMIN_USER = "admin"
 ADMIN_PASS = "bulut123"
 
 # TELEGRAM BILDIRIM AYARLARI (Istege Bagli: Bot olusturdugunda doldurabilirsin)
-TELEGRAM_BOT_TOKEN = ""   # Ornek: "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-TELEGRAM_CHAT_ID = ""     # Ornek: "987654321"
+TELEGRAM_BOT_TOKEN = "8652542165:AAGJcR3BVZFY3v9Ci0ug9uiI43e6Yt7meQE"   
+TELEGRAM_CHAT_ID = "8040095023"     
 
 def telegram_bildir(mesaj):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
