@@ -147,7 +147,32 @@ def logout():
     session.pop('giris', None)
     log_ekle("Yönetici çıkış yaptı.")
     return redirect(url_for('login'))
+@app.route('/loglar')
+def log_sayfasi():
+    if not session.get('giris'):
+        return redirect(url_for('login'))
 
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    # En yeniden en eskiye doğru tüm operasyon kayıtlarını çeker
+    c.execute("SELECT id, islem, tarih FROM loglar ORDER BY id DESC")
+    tum_loglar = c.fetchall()
+    conn.close()
+
+    return render_template('loglar.html', loglar=tum_loglar)
+
+@app.route('/loglar/temizle', methods=['POST'])
+def loglari_temizle():
+    if not session.get('giris'):
+        return redirect(url_for('login'))
+
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM loglar")
+    conn.commit()
+    conn.close()
+    log_ekle("Operasyon günlüğü yönetici tarafından sıfırlandı.")
+    return redirect(url_for('log_sayfasi'))
 @app.route('/')
 def index():
     if not session.get('giris'):
